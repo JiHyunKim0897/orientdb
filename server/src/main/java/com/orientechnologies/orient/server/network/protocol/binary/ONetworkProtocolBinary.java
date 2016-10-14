@@ -44,6 +44,7 @@ import com.orientechnologies.common.serialization.types.OIntegerSerializer;
 import com.orientechnologies.common.serialization.types.ONullSerializer;
 import com.orientechnologies.common.util.OCommonConst;
 import com.orientechnologies.orient.client.remote.OCollectionNetworkSerializer;
+import com.orientechnologies.orient.client.remote.message.OCreateRecordRequest;
 import com.orientechnologies.orient.core.OConstants;
 import com.orientechnologies.orient.core.Orient;
 import com.orientechnologies.orient.core.cache.OCommandCache;
@@ -1181,8 +1182,8 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     }
     OLogManager.instance().info(this, "Created database '%s' of type '%s'", dbName, storageType);
 
-    //TODO: it should be here an additional check for open with the right user
-    connection.setDatabase(server.openDatabase(dbName, connection.getData().serverUsername, null, connection.getData(),true));
+    // TODO: it should be here an additional check for open with the right user
+    connection.setDatabase(server.openDatabase(dbName, connection.getData().serverUsername, null, connection.getData(), true));
 
     beginResponse();
     try {
@@ -1690,17 +1691,12 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
 
     if (!isConnectionAlive(connection))
       return;
+    OCreateRecordRequest request = new OCreateRecordRequest();
+    request.read(connection.getData().protocolVersion, channel);
 
-    final int dataSegmentId = connection.getData().protocolVersion < 24 ? channel.readInt() : 0;
+    final ORecord record = createRecord(connection, request.getRid(), request.getContent(), request.getRecordType());
 
-    final ORecordId rid = new ORecordId(channel.readShort(), ORID.CLUSTER_POS_INVALID);
-    final byte[] buffer = channel.readBytes();
-    final byte recordType = channel.readByte();
-    final byte mode = channel.readByte();
-
-    final ORecord record = createRecord(connection, rid, buffer, recordType);
-
-    if (mode < 2) {
+    if (request.getMode() < 2) {
       beginResponse();
       try {
         sendOk(connection, clientTxId);
@@ -2025,7 +2021,6 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     OLogManager.instance().info(this, "Freezing database '%s'", connection.getDatabase().getURL());
 
     connection.getDatabase().freeze(true);
-  
 
     beginResponse();
     try {
@@ -2470,7 +2465,7 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     Set<String> dbs = server.listDatabases();
     Map<String, String> toSend = new HashMap<String, String>();
     for (String dbName : dbs) {
-        toSend.put(dbName, dbName);
+      toSend.put(dbName, dbName);
     }
     result.field("databases", toSend);
 
@@ -2574,8 +2569,8 @@ public class ONetworkProtocolBinary extends ONetworkProtocol {
     if (server.existsDatabase(iDatabaseName)) {
       throw new ODatabaseException("Database named '" + iDatabaseName + "' already exists");
     }
-  }  
-  
+  }
+
   protected int deleteRecord(final ODatabaseDocument iDatabase, final ORID rid, final int version) {
     try {
       // TRY TO SEE IF THE RECORD EXISTS
